@@ -75,8 +75,6 @@ function getStringForTab (aTab) {
 function getChopsInSet(aTabSet, aDomain) {
 // chopList associates a tab with its cutpoint.
   let chopList = {};
-
-  dump("Sorting tabset... ");
   // Phase 2.1: Sort the current domain's tabs by titles
   aTabSet.sort(function(aTab, bTab) {
     let aTabLabel = getStringForTab(aTab);
@@ -91,101 +89,94 @@ function getChopsInSet(aTabSet, aDomain) {
       return 0;
     }
   });
-  dump("sorted\nbuilding chopList... ");
 
   // Phase 2.2: build and apply the chopList for the domain
   for (let i = 0; i < aTabSet.length; i++) {
     let tab = aTabSet[i];
     let tabString = getStringForTab(tab);
-    let tabPanel = tab.linkedPanel;
-    if (!chopList[tabPanel]) {
-      chopList[tabPanel] = [tab, 0];
+    let panel = tab.linkedPanel;
+    if (!chopList[panel]) {
+      chopList[panel] = [tab, 0];
     }
-    if (i < aTabSet.length - 1) {
-      // We have tabs beyond the current one
-      let next = i + 1;
-      let nextTab = aTabSet[next];
-      let nextString = getStringForTab(nextTab);
+    let end = aTabSet.length;
+    if (i == end - 1) {
+      break;
+    }
+    // We have tabs beyond the current one
+    let next = i + 1;
+    let nextTab = aTabSet[next];
+    let nextString = getStringForTab(nextTab);
 
-      // Phase 2.2.1: Treat neighbors with same title as ourselves
-      let allTabsSame = false;
-      while (tabString == nextString) {
-        next += 1;
-        if (next == aTabSet.length) {
-          allTabsSame = true;
-          break;
-        }
-        else {
-          nextTab = aTabSet[next];
-          nextString = getStringForTab(nextTab);
-        }
-      }
-      if (allTabsSame) {
-        let chopAt = 0;
-        let tabPanel = aTabSet[i].linkedPanel;
-        if (chopList[tabPanel]) {
-          chopAt = chopList[tabPanel][1];
-        }
-        aTabSet.slice(i + 1).forEach(function(tab) {
-          let panel = tab.linkedPanel;
-          if (!chopList[panel] || chopList[panel][1] < chopAt) {
-            chopList[panel] = [tab, chopAt];
-          }
-        });
+    // Phase 2.2.1: Treat neighbors with same title as ourselves
+    let allTabsSame = false;
+    while (tabString == nextString) {
+      next += 1;
+      if (next == end) {
+        allTabsSame = true;
+        break;
       }
       else {
-        let maxChop = 0;
-        dump("comparing " + tabString + " with " + nextString + "...\n");
-        let tabParts = tabString.split(' ');
-        let nextParts = nextString.split(' ');
+        nextTab = aTabSet[next];
+        nextString = getStringForTab(nextTab);
+      }
+    }
+    if (allTabsSame) {
+      let chopAt = 0;
+      if (chopList[panel]) {
+        chopAt = chopList[panel][1];
+      }
+      aTabSet.slice(index + 1).forEach(function(aTab) {
+        let panel = aTab.linkedPanel;
+        chopList[panel] = [aTab, chopAt];
+      });
+      break;
+    }
+    let maxChop = 0;
+    let tabParts = tabString.split(' ');
+    let nextParts = nextString.split(' ');
 
-        // Phase 2.2.2: Ensure that any cuts happen before some part
-        // of the title that's identical (ie, don't make it worse)
-        let tabLast = tabParts.length - 1;
-        let nextLast = nextParts.length - 1;
-        let shorter = Math.min(tabLast, nextLast);
-        dump("getting maxchop...");
-        for (let j = 0; j < shorter; j++) {
-          if (tabParts[tabLast - j] == nextParts[nextLast - j]) {
-            continue;
-          }
-          else {
-            maxChop = tabLast - j;
-            break;
-          }
-        }
-        dump("done: maxChop is " + maxChop + "\n");
+    // Phase 2.2.2: Ensure that any cuts happen before some part
+    // of the title that's identical (ie, don't make it worse)
+    let tabLast = tabParts.length - 1;
+    let nextLast = nextParts.length - 1;
+    let shorter = Math.min(tabLast, nextLast);
+    for (let j = 0; j < shorter; j++) {
+      if (tabParts[tabLast - j] != nextParts[nextLast - j]) {
+        maxChop = tabLast - j;
+        break;
+      }
+    }
 
-        // Phase 2.2.3: Check for sameness at the front; get chop point
-        for (let j = 0; j <= maxChop && j < tabParts.length; j++) {
-          dump("Comparing parts: " + tabParts[j] + " and " + nextParts[j] + "\n");
-          if (tabParts[j] == nextParts[j]) {
-            continue;
-          }
-          else if (j > 0 && j <= maxChop) {
-            dump("Adding chop at " + j + "\n");
-          // FIXME should preclude chops at "- Happy Fun Ball"
-          // Regex?
-          // Phase 2.2.3.2: Found a chop, mark all the relevant tabs
-            aTabSet.slice(i, next + 1).forEach(function(tab) {
-              let panel = tab.linkedPanel;
-              if (!chopList[panel] || j > chopList[panel][1]) {
-                chopList[panel] = [tab, j];
-              }
-            });
-          }
-          else {
-            dump("Adding zero chop\n");
-            // Phase 2.2.3.3: No chop, mark as unchoppable.
-            aTabSet.slice(i, next + 1).forEach(function(tab) {
-              let panel = tab.linkedPanel;
-              if (!chopList[panel]) {
-                chopList[panel] = [tab, 0];
-              }
-            });
-          }
-          break;
+    // Phase 2.2.3: Check for sameness at the front; get chop point
+    for (let j = 0; j <= maxChop && j < tabParts.length; j++) {
+      if (tabParts[j] != nextParts[j]) {
+        if (j > 0 && j <= maxChop) {
+        // FIXME should preclude chops at "- Happy Fun Ball"
+        // Regex?
+        // Phase 2.2.3.2: Found a chop, mark all the relevant tabs
+          aTabSet.slice(i, next + 1).forEach(function(tab) {
+            let panel = tab.linkedPanel;
+            if (!chopList[panel] || j > chopList[panel][1]) {
+              chopList[panel] = [tab, j];
+            }
+            else {
+              dump("earlier chop override at 2.2.3.2\n");
+            }
+          });
         }
+        else {
+          // Phase 2.2.3.3: No chop, mark as unchoppable.
+          aTabSet.slice(i, next + 1).forEach(function(tab) {
+            let panel = tab.linkedPanel;
+            if (!chopList[panel]) {
+              chopList[panel] = [tab, 0];
+            }
+            else {
+              dump("earlier chop override at 2.2.3.3\n");
+            }
+          });
+        }
+        break;
       }
     }
   }
@@ -252,27 +243,18 @@ function getDomainForTab(aTab) {
   // FIXME handling sites that try to use the titlebar as a marquee?
 
 function setTabTitles (tabbrowser) {
-  dump("begin to setTabTitles\n");
   // Start by getting an array of arrays
   // Each subarray contains the index and full content title
 
   let visTabs = tabbrowser.visibleTabs;
-  if (!visTabs) {
-    dump("didn't get visTabs " + tabbrowser.nodeName + "\n");
-    return;
-  }
 
-  dump("got visTabs... ");
   // Phase 1: Put the tabs into bins by domain
   let domainSets = {};
   visTabs.forEach(function(aTab) {
     if (aTab.pinned || aTab.linkedBrowser.contentTitle.length === 0) {
       return;
     }
-    dump("browser... ");
     let tabDomain = getDomainForTab(aTab);
-
-    dump("domain as "+ tabDomain +"... ");
     if (tabDomain in domainSets) {
       domainSets[tabDomain].push(aTab);
     }
@@ -280,7 +262,6 @@ function setTabTitles (tabbrowser) {
       domainSets[tabDomain] = [aTab];
     }
   });
-  dump("got domainSets... done getting startup\n");
 
   // Phase 2: Process each domain
   for (domain in domainSets) {
@@ -290,27 +271,18 @@ function setTabTitles (tabbrowser) {
     let tabSet = domainSets[domain];
     let chopList = getChopsInSet(tabSet, domain);
 
-    dump("applying chopList for " + domain + "... ");
     // Phase 2.2.4: Apply the chopList
     applyChoplist(tabbrowser, chopList);
   }
-  dump("done\n");
   let event = document.createEvent("Events");
   event.initEvent("TabsRelabeled", true, false);
   this.dispatchEvent(event);
 }
 
 function resetTabTitles (tabbrowser) {
-  let visTabs = tabbrowser.visibleTabs;
-  try {
-    visTabs.forEach(function(tab) {
-      tab.label = tabbrowser.getBrowserForTab(tab).contentTitle;
-    });
-  }
-  catch (ex) {
-    dump("no visTabs? " + ex + "\n");
-    dump("tabbrowser? " + tabbrowser.nodeName + "\n");
-  }
+  tabbrowser.visibleTabs.forEach(function(tab) {
+    tab.label = tabbrowser.getBrowserForTab(tab).contentTitle;
+  });
 }
 
 function attach2 (win) {
@@ -321,19 +293,16 @@ function attach (win, setNow) {
   let tabs = win.document.getElementById("tabbrowser-tabs");
   if (tabs) {
     TAB_EVENTS.forEach(function(aEvent) {
-      dump("adding " + aEvent + "\n");
       tabs.addEventListener(aEvent, handleRetitle, false);
     });
     unload(function() { clean(tabs); }, win);
     if (setNow) {
-      dump("Calling SET from ATTACH\n");
       setTabTitles(tabs.tabbox.parentNode);
     }
   }
 }
 
 function clean (tabs) {
-  dump("got clean with " + tabs.nodeName + "\n");
   TAB_EVENTS.forEach(function(aEvent) {
     tabs.removeEventListener(aEvent, handleRetitle, false);
   });
