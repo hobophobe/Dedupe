@@ -1,9 +1,9 @@
 #!/bin/bash
 # Build config for build.sh
 APP_NAME=dedupe
-CHROME_PROVIDERS="content locale"
+CHROME_PROVIDERS=""
 CLEAN_UP=1
-ROOT_FILES="COPYING"
-ROOT_DIRS=""
+ROOT_FILES="bootstrap.js README"
+ROOT_DIRS="includes"
 BEFORE_BUILD=
 AFTER_BUILD=

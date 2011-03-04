@@ -1,0 +1,9 @@
+This addon is based on the patch I wrote for bug 583890.  
+Unfortunately that patch came too late to make Fx 4.  
+
+I plan to update this addon to as close to whatever final patch is used for that
+bug, so that users of Fx 4 can still have that feature in a small addon.
+
+No plans to update this addon to support future versions of Firefox beyond 4.
+
+Pull requests welcome.

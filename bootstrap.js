@@ -295,20 +295,21 @@ function resetTabTitles (tabbrowser) {
   });
 }
 
-function attach2 (win) {
-  attach(win, true);
+function attachOnEnable (win) {
+  attach(win);
+  let tabs = win.document.getElementById("tabbrowser-tabs");
+  if (tabs) {
+    setTabTitles(tabs.tabbox.parentNode);
+  }
 }
 
-function attach (win, setNow) {
+function attach (win) {
   let tabs = win.document.getElementById("tabbrowser-tabs");
   if (tabs) {
     TAB_EVENTS.forEach(function(aEvent) {
       tabs.addEventListener(aEvent, handleRetitle, false);
     });
     unload(function() { clean(tabs); }, win);
-    if (setNow) {
-      setTabTitles(tabs.tabbox.parentNode);
-    }
   }
 }
 
@@ -323,7 +324,7 @@ function startup (data, reason) {
   AddonManager.getAddonByID(data.id, function(addon) {
     include(addon.getResourceURI("includes/utils.js").spec);
     if (reason === ADDON_ENABLE) {
-      watchWindows(attach2);
+      watchWindows(attachOnEnable);
     }
     else {
       watchWindows(attach);
