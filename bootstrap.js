@@ -62,20 +62,21 @@ function handleRetitle (aEvent) {
 // This is used for RTL part of the code.
 // FIXME Should it memoize?
 function getStringForTab (aTab) {
-  let tabString = aTab.linkedBrowser.contentTitle;
+  let browser = aTab.linkedBrowser;
+  let title = browser.contentTitle;
   if (aTab.direction == "rtl") {
-    let stringArray = tabString.split('').reverse();
+    let stringArray = title.split('').reverse();
     return stringArray.join('');
   }
   else {
-    return tabString;
+    return title;
   }
 }
 
 function getChopsInSet(aTabSet, aDomain) {
-// chopList associates a tab with its cutpoint.
+  // chopList associates a tab with its cutpoint.
   let chopList = {};
-  // Phase 2.1: Sort the current domain's tabs by titles
+  // Sort the current domain's tabs by titles
   aTabSet.sort(function(aTab, bTab) {
     let aTabLabel = getStringForTab(aTab);
     let bTabLabel = getStringForTab(bTab);
@@ -90,7 +91,7 @@ function getChopsInSet(aTabSet, aDomain) {
     }
   });
 
-  // Phase 2.2: build and apply the chopList for the domain
+  // build and apply the chopList for the domain
   for (let i = 0; i < aTabSet.length; i++) {
     let tab = aTabSet[i];
     let tabString = getStringForTab(tab);
@@ -98,8 +99,7 @@ function getChopsInSet(aTabSet, aDomain) {
     if (!chopList[panel]) {
       chopList[panel] = [tab, 0];
     }
-    let end = aTabSet.length;
-    if (i == end - 1) {
+    if (i == aTabSet.length - 1) {
       break;
     }
     // We have tabs beyond the current one
@@ -107,11 +107,11 @@ function getChopsInSet(aTabSet, aDomain) {
     let nextTab = aTabSet[next];
     let nextString = getStringForTab(nextTab);
 
-    // Phase 2.2.1: Treat neighbors with same title as ourselves
+    // Treat neighbors with same title as ourselves
     let allTabsSame = false;
     while (tabString == nextString) {
       next += 1;
-      if (next == end) {
+      if (next == aTabSet.length) {
         allTabsSame = true;
         break;
       }
@@ -125,18 +125,21 @@ function getChopsInSet(aTabSet, aDomain) {
       if (chopList[panel]) {
         chopAt = chopList[panel][1];
       }
-      aTabSet.slice(index + 1).forEach(function(aTab) {
+      aTabSet.slice(i).forEach(function(aTab) {
         let panel = aTab.linkedPanel;
-        chopList[panel] = [aTab, chopAt];
+        if (!chopList[panel] || chopAt > chopList[panel][1]) {
+          chopList[panel] = [aTab, chopAt];
+        }
       });
       break;
     }
+
     let maxChop = 0;
     let tabParts = tabString.split(' ');
     let nextParts = nextString.split(' ');
 
-    // Phase 2.2.2: Ensure that any cuts happen before some part
-    // of the title that's identical (ie, don't make it worse)
+    // Ensure that any chop happen before some part of the title that's
+    // identical (ie, don't make it worse)
     let tabLast = tabParts.length - 1;
     let nextLast = nextParts.length - 1;
     let shorter = Math.min(tabLast, nextLast);
@@ -147,32 +150,25 @@ function getChopsInSet(aTabSet, aDomain) {
       }
     }
 
-    // Phase 2.2.3: Check for sameness at the front; get chop point
-    for (let j = 0; j <= maxChop && j < tabParts.length; j++) {
+    // Check for sameness at the front; get chop point
+    for (let j = 0; j < tabParts.length; j++) {
       if (tabParts[j] != nextParts[j]) {
-        if (j > 0 && j <= maxChop) {
-        // FIXME should preclude chops at "- Happy Fun Ball"
-        // Regex?
-        // Phase 2.2.3.2: Found a chop, mark all the relevant tabs
-          aTabSet.slice(i, next + 1).forEach(function(tab) {
-            let panel = tab.linkedPanel;
+        if (j > 0) {
+          // Found a chop, mark all the relevant tabs
+          let chopAt = j > maxChop ? maxChop : j;
+          aTabSet.slice(i, next + 1).forEach(function(aTab) {
+            let panel = aTab.linkedPanel;
             if (!chopList[panel] || j > chopList[panel][1]) {
-              chopList[panel] = [tab, j];
-            }
-            else {
-              dump("earlier chop override at 2.2.3.2\n");
+              chopList[panel] = [aTab, chopAt];
             }
           });
         }
         else {
-          // Phase 2.2.3.3: No chop, mark as unchoppable.
-          aTabSet.slice(i, next + 1).forEach(function(tab) {
-            let panel = tab.linkedPanel;
+          // No chop, mark as unchoppable.
+          aTabSet.slice(i, next + 1).forEach(function(aTab) {
+            let panel = aTab.linkedPanel;
             if (!chopList[panel]) {
-              chopList[panel] = [tab, 0];
-            }
-            else {
-              dump("earlier chop override at 2.2.3.3\n");
+              chopList[panel] = [aTab, 0];
             }
           });
         }
@@ -193,11 +189,24 @@ function applyChoplist(aTabbrowser, aChoplist) {
     if (title.length == 0) {
       continue;
     }
-    let newLabel = title.split(' ').slice(chop).join(' ');
+    let newLabelArray = title.split(' ');
+    if (chop > 0) {
+      let preAdjustedChop = chop;
+      while (chop > 0 && newLabelArray[chop] == "-") {
+        chop--;
+      }
+      if (chop == 0) {
+        chop = preAdjustedChop;
+      }
+    }
+    let newLabel = newLabelArray.slice(chop).join(' ');
+    if (chop > 0) {
+      dump(newLabelArray.slice(0, chop).join(' ') + " :: " + title + "\n\n");
+    }
     if (tab.direction == "rtl") {
       newLabel = reverseString(newLabel);
     }
-    tab.label = newLabel;
+    tab.setAttribute("label", newLabel);
     aTabbrowser._tabAttrModified(tab);
   }
   aTabbrowser.tabContainer.addEventListener(
@@ -205,16 +214,15 @@ function applyChoplist(aTabbrowser, aChoplist) {
 }
 
 function getDomainForTab(aTab) {
-  let eTLDSVC =
-      Cc["@mozilla.org/network/effective-tld-service;1"].getService(
-        Ci.nsIEffectiveTLDService);
+  let eTLDSVC = Cc["@mozilla.org/network/effective-tld-service;1"]
+               .getService(Ci.nsIEffectiveTLDService);
   let browserURI = aTab.linkedBrowser.currentURI;
   let tabDomain = "unknown";
   switch (browserURI.scheme)
   {
+  case "file":
   case "about":
   case "chrome":
-  case "file":
   // FIXME how to modify to work with '/' separator?
   // Does Windows use \ for the path? ("file://C:\foo\")
   // What if a webapp file browser sets file paths as titles via script?
@@ -235,20 +243,22 @@ function getDomainForTab(aTab) {
 }
 
 // Retitles the given tabs
+  // FIXME new event for before this fires?
   // FIXME only include tabs that are actually visible?
   // FIXME only include tabs with labels that are currently cropped?
-  // FIXME skip selected?
   // FIXME RTL needs testing/lookover by someone that's done RTL stuff before
-  // FIXME new event for before this fires?
   // FIXME handling sites that try to use the titlebar as a marquee?
+        // Initial tests show this is fast enough to handle that case, assuming
+        // that the site isn't scrolling fast enough to degrade performance on
+        // its own.  If it is, though, this will only make it negligibly worse.
 
 function setTabTitles (tabbrowser) {
   // Start by getting an array of arrays
   // Each subarray contains the index and full content title
-
   let visTabs = tabbrowser.visibleTabs;
+  let startDate = Date.now();
 
-  // Phase 1: Put the tabs into bins by domain
+  // Put the tabs into bins by domain
   let domainSets = {};
   visTabs.forEach(function(aTab) {
     if (aTab.pinned || aTab.linkedBrowser.contentTitle.length === 0) {
@@ -263,20 +273,20 @@ function setTabTitles (tabbrowser) {
     }
   });
 
-  // Phase 2: Process each domain
   for (domain in domainSets) {
     if (domain == "unknown") {
       continue;
     }
     let tabSet = domainSets[domain];
     let chopList = getChopsInSet(tabSet, domain);
-
-    // Phase 2.2.4: Apply the chopList
     applyChoplist(tabbrowser, chopList);
   }
-  let event = document.createEvent("Events");
+  let event = tabbrowser.contentDocument.createEvent("Events");
   event.initEvent("TabsRelabeled", true, false);
-  this.dispatchEvent(event);
+  tabbrowser.dispatchEvent(event);
+
+  dump("took " + ((Date.now() - startDate) / 1000) +
+       " seconds for " + visTabs.length + " tabs\n");
 }
 
 function resetTabTitles (tabbrowser) {
